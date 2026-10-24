@@ -41,7 +41,7 @@ public class BankingCommand {
 
                     if (paymentService.getPlayerBankingSessionPayment().containsKey(player.getUniqueId())) {
                         MessageUtil.sendMessage(player, messageConfig.existBankingSession);
-                        if (FloodgateUtil.isBedrockPlayer(player)) {
+                        if (SPPlugin.getInstance().isFloodgateEnabled() && FloodgateUtil.isBedrockPlayer(player)) {
                             BankingForm.send(player, paymentService.getPlayerBankingData().get(player.getUniqueId()));
                             return;
                         }

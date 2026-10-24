@@ -26,7 +26,6 @@ compileOnly 'org.projectlombok:lombok:1.18.38'
         exclude group: 'me.clip.placeholderapi', module: 'libs'
     }
     compileOnly('org.geysermc.floodgate:api:2.2.4-SNAPSHOT')
-    compileOnly("su.nightexpress.coinsengine:CoinsEngine:2.5.0")
     compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.12")
     implementation("de.exlll:configlib-paper:4.8.1") {
         exclude group: 'org.yaml', module: 'snakeyaml-engine'

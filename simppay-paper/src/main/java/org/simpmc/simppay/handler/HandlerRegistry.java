@@ -28,8 +28,8 @@ public class HandlerRegistry {
         bankHandler = bankingConfig.bankApi.handlerFactory.get();
         try {
             coinsHandler = coinsConfig.pointsProvider.handlerFactory.get();
-        } catch (Exception e) {
-            MessageUtil.warn("Unable to find any compatible Points plugin provider, voiding all coins manipulation");
+        } catch (Exception | LinkageError e) {
+            MessageUtil.warn("Configured points provider is unavailable (" + e.getClass().getSimpleName() + "); coin rewards are disabled until a provider is installed/configured");
             coinsHandler = new DefaultCoinsHandler();
         }
 
