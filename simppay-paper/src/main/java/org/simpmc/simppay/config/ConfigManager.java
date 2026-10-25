@@ -42,7 +42,7 @@ public class ConfigManager {
     @Getter
     private static ConfigManager instance;
 
-    private final Map<Class<?>, Object> configs = new HashMap<>();
+    private volatile Map<Class<?>, Object> configs = Map.of();
     private final SPPlugin plugin;
 
     private final List<Class<?>> configClasses = List.of(
@@ -133,48 +133,64 @@ public class ConfigManager {
         return Paths.get(plugin.getDataFolder().getPath(), fileName);
     }
 
-    @SuppressWarnings("unchecked")
     private void registerAll() {
         plugin.getLogger().info("Loading all configurations");
-        for (Class<?> rawClass : configClasses) {
-            registerConfig((Class<Object>) rawClass);
-        }
+        configs = loadSnapshot(Map.of());
         plugin.getLogger().info("All configurations loaded successfully");
     }
 
-    private <T> void registerConfig(Class<T> cfgClass) {
+    /**
+     * Build a complete new configuration snapshot without modifying the one
+     * currently used by scheduled tasks and command handlers.
+     */
+    private Map<Class<?>, Object> loadSnapshot(Map<Class<?>, Object> previous) {
+        Map<Class<?>, Object> next = new HashMap<>();
+        for (Class<?> rawClass : configClasses) {
+            next.put(rawClass, loadConfig(rawClass, previous));
+        }
+        return Map.copyOf(next);
+    }
+
+    private <T> T loadConfig(Class<T> cfgClass, Map<Class<?>, Object> previous) {
         Path path = configPaths.get(cfgClass);
         try {
             MigrationRegistry.migrateIfNeeded(cfgClass, path);
             YamlConfigurationStore<T> store = new YamlConfigurationStore<>(cfgClass, properties);
             store.update(path);
             T loaded = store.load(path);
-            configs.put(cfgClass, loaded);
+            if (loaded == null) {
+                throw new IllegalStateException("Config loader returned null");
+            }
+            return loaded;
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to load config for " + cfgClass.getSimpleName() + ": " + e.getMessage());
-            plugin.getLogger().severe("Using default values for " + cfgClass.getSimpleName());
+            T previousConfig = cfgClass.cast(previous.get(cfgClass));
+            if (previousConfig != null) {
+                plugin.getLogger().warning("Keeping last good config for " + cfgClass.getSimpleName());
+                return previousConfig;
+            }
             try {
-                configs.put(cfgClass, cfgClass.getDeclaredConstructor().newInstance());
+                plugin.getLogger().warning("Using defaults for " + cfgClass.getSimpleName());
+                return cfgClass.getDeclaredConstructor().newInstance();
             } catch (Exception ex) {
-                plugin.getLogger().severe("Could not create default instance for " + cfgClass.getSimpleName());
+                throw new IllegalStateException("Unable to initialize config " + cfgClass.getSimpleName(), ex);
             }
         }
     }
 
     /**
-     * Reload all configs (e.g. on /simppayadmin reload)
+     * Reload configs atomically so async milestone/bossbar tasks never see
+     * the temporary empty map created by the old clear-and-repopulate logic.
      */
-    public void reloadAll() {
-        configs.clear();
+    public synchronized void reloadAll() {
         plugin.getLogger().info("Reloading all configurations");
-        for (Class<?> rawClass : configClasses) {
-            registerConfig(rawClass);
-        }
+        Map<Class<?>, Object> next = loadSnapshot(configs);
+        configs = next;
         plugin.getLogger().info("All configurations reloaded successfully");
     }
 
     /**
-     * Retrieve a loaded configuration instance by its class
+     * Retrieve a loaded configuration instance by its class.
      */
     @SuppressWarnings("unchecked")
     public <T> T getConfig(Class<T> cls) {
